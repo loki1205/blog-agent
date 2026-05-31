@@ -8,7 +8,7 @@ import os
 import json
 import smtplib
 import datetime
-
+from zoneinfo import ZoneInfo
 # ── Dependency check first ────────────────────────────────────────────────────
 MISSING = []
 try:
@@ -100,9 +100,19 @@ def check_calendar():
     )
     service = build("calendar", "v3", credentials=creds)
 
-    today = datetime.date.today()
-    t_min = datetime.datetime(today.year, today.month, today.day, 0, 0, 0).isoformat() + "Z"
-    t_max = datetime.datetime(today.year, today.month, today.day, 23, 59, 59).isoformat() + "Z"
+    # 1. Force the timezone to IST (Asia/Kolkata)
+    ist_tz = ZoneInfo("Asia/Kolkata")
+
+    # 2. Get the current date explicitly in IST
+    today = datetime.datetime.now(ist_tz).date()
+
+    # 3. Build timezone-aware start and end times for today
+    start_of_day = datetime.datetime(today.year, today.month, today.day, 0, 0, 0, tzinfo=ist_tz)
+    end_of_day = datetime.datetime(today.year, today.month, today.day, 23, 59, 59, tzinfo=ist_tz)
+
+    # 4. Generate the proper ISO strings (Python automatically handles the "+05:30" offset)
+    t_min = start_of_day.isoformat()
+    t_max = end_of_day.isoformat()
 
     result = service.events().list(
         calendarId=calendar_id,
@@ -139,7 +149,7 @@ def check_gemini():
     text = resp.text.strip()
     return f"Response: '{text}'"
 
-#check("Gemini API", check_gemini)
+check("Gemini API", check_gemini)
 
 
 # ── 5. Pexels API ─────────────────────────────────────────────────────────────
