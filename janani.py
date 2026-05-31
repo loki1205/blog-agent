@@ -135,13 +135,23 @@ def call_gemini(topic: str, context_notes: str) -> dict:
         model_name=GEMINI_MODEL,
         system_instruction=SYSTEM_PROMPT,
         generation_config=genai.GenerationConfig(
-            max_output_tokens=8192,
+            max_output_tokens=8192,   # blog markdown needs room; 4096 was too tight
             temperature=0.7,
             response_mime_type="application/json",  # enforce JSON mode
         ),
     )
 
     response = model.generate_content(build_user_prompt(topic, context_notes))
+
+    # Log finish reason so truncation is always visible in Actions logs
+    finish_reason = getattr(response.candidates[0], "finish_reason", "UNKNOWN")
+    log.info(f"Gemini finish_reason: {finish_reason}")
+    if str(finish_reason) in ("2", "MAX_TOKENS", "FinishReason.MAX_TOKENS"):
+        raise RuntimeError(
+            "Gemini hit max_output_tokens and truncated the response — "
+            "the JSON is incomplete. Increase max_output_tokens or shorten the prompt."
+        )
+
     raw = response.text.strip()
 
     # Strip accidental markdown fences if JSON mode isn't respected
@@ -151,7 +161,13 @@ def call_gemini(topic: str, context_notes: str) -> dict:
             raw = raw[4:]
         raw = raw.strip()
 
-    data = json.loads(raw)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        # Log the tail of the raw response so you can see exactly where it cut off
+        preview = raw[-300:] if len(raw) > 300 else raw
+        log.error(f"JSON parse failed. Last 300 chars of response:\n{preview}")
+        raise RuntimeError(f"Gemini returned invalid JSON: {e}") from e
 
     required_keys = {"blog_markdown", "dev_to_tags", "image_search_keyword", "linkedin_post", "x_post"}
     missing = required_keys - data.keys()
@@ -193,6 +209,25 @@ def fetch_pexels_image(keyword: str) -> str:
 
 # ── Step 4: Dev.to draft creation ─────────────────────────────────────────────
 
+def sanitize_devto_tags(raw_tags: list) -> list:
+    """
+    Dev.to tag rules:
+    - Max 4 tags
+    - Lowercase only
+    - Letters and digits only (no spaces, hyphens, dots, etc.)
+    - Max 30 chars each
+    """
+    import re
+    cleaned = []
+    for tag in raw_tags:
+        tag = tag.lower().strip()
+        tag = re.sub(r"[^a-z0-9]", "", tag)
+        tag = tag[:30]
+        if tag:
+            cleaned.append(tag)
+    return cleaned[:4]
+
+
 def create_devto_draft(topic: str, content: dict, cover_image_url: str) -> str:
     """POST a draft article to Dev.to, return the draft URL."""
     log.info("Creating Dev.to draft...")
@@ -203,6 +238,7 @@ def create_devto_draft(topic: str, content: dict, cover_image_url: str) -> str:
         "api-key": api_key,
         "Content-Type": "application/json",
     }
+
     payload = {
         "article": {
             "title": topic,
@@ -214,7 +250,10 @@ def create_devto_draft(topic: str, content: dict, cover_image_url: str) -> str:
     }
 
     resp = requests.post(url, headers=headers, json=payload, timeout=15)
-    resp.raise_for_status()
+
+    if not resp.ok:
+        log.error(f"Dev.to API error {resp.status_code}: {resp.text}")
+        resp.raise_for_status()
 
     draft_url = resp.json().get("url", "https://dev.to/dashboard")
     log.info(f"Dev.to draft created: {draft_url}")
