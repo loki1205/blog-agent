@@ -277,7 +277,7 @@ def send_email_digest(topic: str, draft_url: str, content: dict) -> None:
     smtp_pass = get_env("GMAIL_APP_PASSWORD")
     recipient = os.environ.get("NOTIFY_EMAIL", smtp_user)  # default: send to self
 
-    subject = f"📝 Janani Draft Ready: {topic}"
+    subject = f"📝 Your Blog Draft is Ready: {topic}"
 
     html_body = f"""
 <html><body style="font-family: Arial, sans-serif; max-width: 680px; margin: auto; color: #222;">
@@ -313,7 +313,7 @@ def send_email_digest(topic: str, draft_url: str, content: dict) -> None:
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = smtp_user
+    msg["From"] = "Agent Janani <{}>".format(smtp_user)
     msg["To"] = recipient
     msg.attach(MIMEText(html_body, "html"))
 
