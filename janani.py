@@ -239,11 +239,19 @@ def create_devto_draft(topic: str, content: dict, cover_image_url: str) -> str:
         "Content-Type": "application/json",
     }
 
+    tags = sanitize_devto_tags(content["dev_to_tags"])
+    log.info(f"Dev.to tags (sanitized): {tags}")
+
+    # Prepend image at top of markdown body — more reliable than cover_image
+    # since Dev.to's backend often rejects direct Pexels URLs for cover_image.
+    image_markdown = f"![Cover Image]({cover_image_url})\n\n"
+    body = image_markdown + content["blog_markdown"]
+
     payload = {
         "article": {
             "title": topic,
-            "body_markdown": content["blog_markdown"],
-            "cover_image": cover_image_url,
+            "body_markdown": body,
+            "tags": tags,
             "published": False,  # always save as draft
         }
     }
