@@ -135,7 +135,7 @@ def call_gemini(topic: str, context_notes: str) -> dict:
         model_name=GEMINI_MODEL,
         system_instruction=SYSTEM_PROMPT,
         generation_config=genai.GenerationConfig(
-            max_output_tokens=4096,
+            max_output_tokens=8192,
             temperature=0.7,
             response_mime_type="application/json",  # enforce JSON mode
         ),
