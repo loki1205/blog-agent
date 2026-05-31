@@ -244,7 +244,6 @@ def create_devto_draft(topic: str, content: dict, cover_image_url: str) -> str:
             "title": topic,
             "body_markdown": content["blog_markdown"],
             "cover_image": cover_image_url,
-            "tags": content["dev_to_tags"],
             "published": False,  # always save as draft
         }
     }
